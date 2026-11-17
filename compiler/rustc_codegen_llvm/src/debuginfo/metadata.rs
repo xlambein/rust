@@ -1563,10 +1563,19 @@ pub(crate) fn build_global_var_di_node<'ll>(
     );
 }
 
+pub(crate) enum ConstDiValue<'ll> {
+    Immediate(u64),
+    Global(Value<'ll>),
+}
+
 /// Creates debug information for the given constant.
 ///
 /// Adds the created debuginfo nodes directly to the crate's IR.
-pub(crate) fn build_const_var_di_node<'ll>(cx: &CodegenCx<'ll, '_>, def_id: DefId, value: u64) {
+pub(crate) fn build_const_var_di_node<'ll>(
+    cx: &CodegenCx<'ll, '_>,
+    def_id: DefId,
+    value: ConstDiValue<'ll>,
+) {
     if cx.dbg_cx.is_none() {
         return;
     }
@@ -1594,18 +1603,36 @@ pub(crate) fn build_const_var_di_node<'ll>(cx: &CodegenCx<'ll, '_>, def_id: DefI
 
     let global_align = cx.align_of(variable_type);
 
-    DIB(cx).create_const_variable(
-        Some(var_scope),
-        var_name,
-        linkage_name,
-        file_metadata,
-        line_number,
-        type_di_node,
-        is_local_to_unit,
-        value,
-        None, // (decl)
-        Some(global_align),
-    );
+    match value {
+        ConstDiValue::Immediate(value) => {
+            DIB(cx).create_const_variable(
+                Some(var_scope),
+                var_name,
+                linkage_name,
+                file_metadata,
+                line_number,
+                type_di_node,
+                is_local_to_unit,
+                value,
+                None, // (decl)
+                Some(global_align),
+            );
+        }
+        ConstDiValue::Global(value) => {
+            DIB(cx).create_static_variable(
+                Some(var_scope),
+                var_name,
+                linkage_name,
+                file_metadata,
+                line_number,
+                type_di_node,
+                is_local_to_unit,
+                value,
+                None, // (decl)
+                Some(global_align),
+            );
+        }
+    }
 }
 
 /// Generates LLVM debuginfo for a vtable.

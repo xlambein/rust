@@ -693,13 +693,25 @@ impl<'ll> CodegenCx<'ll, '_> {
             return;
         };
 
-        let Ok(bits) = u64::try_from(bits) else {
-            return;
-        };
+        if let Ok(bits) = u64::try_from(bits) {
+            debuginfo::build_const_var_di_node(
+                self,
+                def_id,
+                debuginfo::metadata::ConstDiValue::Immediate(bits),
+            );
+        } else {
+            let init = self.const_u128(bits);
+            let global = self.static_addr_of_mut(init, layout.align, Some("debug_const"));
+            llvm::set_global_constant(global, true);
+            self.add_used_global(global);
+            debuginfo::build_const_var_di_node(
+                self,
+                def_id,
+                debuginfo::metadata::ConstDiValue::Global(global),
+            );
+        }
 
         // TODO handle all different const types
-
-        debuginfo::build_const_var_di_node(self, def_id, bits);
     }
 
     /// Add a global value to a list to be stored in the `llvm.used` variable, an array of ptr.
