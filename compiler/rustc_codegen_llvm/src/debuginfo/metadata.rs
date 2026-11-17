@@ -1563,6 +1563,51 @@ pub(crate) fn build_global_var_di_node<'ll>(
     );
 }
 
+/// Creates debug information for the given constant.
+///
+/// Adds the created debuginfo nodes directly to the crate's IR.
+pub(crate) fn build_const_var_di_node<'ll>(cx: &CodegenCx<'ll, '_>, def_id: DefId, value: u64) {
+    if cx.dbg_cx.is_none() {
+        return;
+    }
+
+    // Only create type information if full debuginfo is enabled
+    if cx.sess().opts.debuginfo != DebugInfo::Full {
+        return;
+    }
+
+    let tcx = cx.tcx;
+
+    let var_scope = get_namespace_for_item(cx, def_id);
+    let (file_metadata, line_number) = file_metadata_from_def_id(cx, Some(def_id));
+
+    let is_local_to_unit = is_node_local_to_unit(cx, def_id);
+
+    let variable_type = Instance::mono(cx.tcx, def_id).ty(cx.tcx, cx.typing_env());
+    let type_di_node = type_di_node(cx, variable_type);
+    let var_name = tcx.item_name(def_id);
+    let var_name = var_name.as_str();
+    let linkage_name = mangled_name_of_instance(cx, Instance::mono(tcx, def_id)).name;
+    // When empty, linkage_name field is omitted,
+    // which is what we want for no_mangle constants
+    let linkage_name = if var_name == linkage_name { "" } else { linkage_name };
+
+    let global_align = cx.align_of(variable_type);
+
+    DIB(cx).create_const_variable(
+        Some(var_scope),
+        var_name,
+        linkage_name,
+        file_metadata,
+        line_number,
+        type_di_node,
+        is_local_to_unit,
+        value,
+        None, // (decl)
+        Some(global_align),
+    );
+}
+
 /// Generates LLVM debuginfo for a vtable.
 ///
 /// The vtable type looks like a struct with a field for each function pointer and super-trait

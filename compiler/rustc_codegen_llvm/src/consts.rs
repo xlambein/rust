@@ -676,6 +676,32 @@ impl<'ll> CodegenCx<'ll, '_> {
         }
     }
 
+    fn codegen_const_item(&mut self, def_id: DefId) {
+        // TODO this must get eval'd somewhere else too, let's try to reuse that result
+        let Ok(val) = self.tcx.const_eval_poly(def_id) else {
+            // TODO log error
+            return;
+        };
+
+        // let ConstValue::Scalar(InterpScalar::Int(val)) = val else { todo!() };
+
+        let const_ty = self.tcx.type_of(def_id).instantiate_identity().skip_normalization();
+
+        let layout = self.layout_of(const_ty);
+
+        let Some(bits) = val.try_to_bits(layout.size) else {
+            return;
+        };
+
+        let Ok(bits) = u64::try_from(bits) else {
+            return;
+        };
+
+        // TODO handle all different const types
+
+        debuginfo::build_const_var_di_node(self, def_id, bits);
+    }
+
     /// Add a global value to a list to be stored in the `llvm.used` variable, an array of ptr.
     pub(crate) fn add_used_global(&mut self, global: Value<'ll>) {
         self.used_statics.push(global);
@@ -921,5 +947,9 @@ impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
 
     fn codegen_static(&mut self, def_id: DefId) {
         self.codegen_static_item(def_id)
+    }
+
+    fn codegen_const(&mut self, def_id: DefId) {
+        self.codegen_const_item(def_id)
     }
 }

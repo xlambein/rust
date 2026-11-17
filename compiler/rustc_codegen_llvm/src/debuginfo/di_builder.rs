@@ -87,6 +87,50 @@ pub(crate) trait DIBuilderExt<'ll> {
 
         global_var_expr
     }
+
+    fn create_const_variable(
+        &self,
+        scope: Option<&'ll llvm::Metadata>,
+        name: &str,
+        linkage_name: &str,
+        file: &'ll llvm::Metadata,
+        line_number: c_uint,
+        ty: &'ll llvm::Metadata,
+        is_local_to_unit: bool,
+        val: u64,
+        decl: Option<&'ll llvm::Metadata>,
+        align: Option<Align>,
+    ) -> &'ll llvm::Metadata {
+        use crate::debuginfo::dwarf_const::{DW_OP_constu, DW_OP_stack_value};
+
+        let this = self.as_di_builder();
+        let align_in_bits = align.map_or(0, |align| align.bits() as u32);
+
+        // TODO this could be an array? Depends on how it would work for non-word sized values.
+        let mut addr_ops = smallvec::SmallVec::<[u64; 3]>::new();
+        addr_ops.push(DW_OP_constu);
+        addr_ops.push(val);
+        addr_ops.push(DW_OP_stack_value);
+        let expr = self.create_expression(&addr_ops);
+
+        unsafe {
+            llvm::LLVMDIBuilderCreateGlobalVariableExpression(
+                this,
+                scope,
+                name.as_ptr(),
+                name.len(),
+                linkage_name.as_ptr(),
+                linkage_name.len(),
+                file,
+                line_number,
+                ty,
+                is_local_to_unit.to_llvm_bool(),
+                expr,
+                decl,
+                align_in_bits,
+            )
+        }
+    }
 }
 
 impl<'ll> DIBuilderExt<'ll> for &DIBuilder<'ll> {
